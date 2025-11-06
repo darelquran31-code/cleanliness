@@ -152,4 +152,19 @@ export const api = {
     });
     return response.json();
   },
+
+  updateAllReports: async () => {
+    const response = await fetch(`${API_BASE_URL}/admin/reports/update-all`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    return response.json();
+  },
+
+  getReportsSheetData: async () => {
+    const response = await fetch(`${API_BASE_URL}/admin/reports/sheet-data`, {
+      headers: getHeaders(),
+    });
+    return response.json();
+  },
 };

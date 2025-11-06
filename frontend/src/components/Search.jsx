@@ -59,7 +59,7 @@ export default function Search() {
 
   const formatDate = (timestamp) => {
     if (!timestamp) return '';
-    return new Date(timestamp).toLocaleString('ar-SA');
+    return new Date(timestamp).toLocaleString('ar-EG');
   };
 
   return (

@@ -30,16 +30,21 @@ const PORT = process.env.PORT || 5000;
 // بدء السيرفر
 (async () => {
   try {
-    // تهيئة Google Sheets قبل بدء السيرفر
+    console.log('🚀 بدء تشغيل السيرفر...');
+
+    // بدء السيرفر أولاً
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`✅ السيرفر يعمل على البورت: ${PORT}`);
+      console.log(`🌐 يمكن الوصول إليه على: http://localhost:${PORT}`);
+    });
+
+    // تهيئة Google Sheets بعد بدء السيرفر
     console.log('🔄 بدء تهيئة Google Sheets...');
     await sheetsService.initialize();
     console.log('✅ تم تهيئة Google Sheets بنجاح');
+
   } catch (error) {
     console.error('❌ خطأ في تهيئة Google Sheets:', error.message);
-    console.error('🔄 سيتم بدء السيرفر بدون Google Sheets...');
+    console.error('سيستمر السيرفر بدون Google Sheets');
   }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ السيرفر يعمل على البورت: ${PORT}`);
-  });
 })();

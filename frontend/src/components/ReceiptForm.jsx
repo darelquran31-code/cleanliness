@@ -270,8 +270,8 @@ export default function ReceiptForm({ onReceiptAdded }) {
               value={formData.year}
               onChange={handleInputChange}
               placeholder="2024"
-              min="2020"
-              max="2030"
+              min="2025"
+              max="2040"
               required
             />
           </div>
@@ -314,7 +314,7 @@ export default function ReceiptForm({ onReceiptAdded }) {
           {loading ? (
             <>⏳ جاري الحفظ...</>
           ) : (
-            <><FiSave size={18} /> حفظ الفاتورة</>
+            <><FiSave size={18} /> حفظ الإضافة</>
           )}
         </button>
       </form>

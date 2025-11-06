@@ -7,12 +7,38 @@ export default function Reports() {
   const [monthlyData, setMonthlyData] = useState([]);
   const [governorateData, setGovernorateData] = useState([]);
   const [mosqueData, setMosqueData] = useState([]);
-  const [materialsByGovernorate, setMaterialsByGovernorate] = useState({});
-  const [materialsList, setMaterialsList] = useState([]);
-  const [governoratesList, setGovernoratesList] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeView, setActiveView] = useState('overview');
+  const [sheetData, setSheetData] = useState([]);
+
+  // ألوان مختلفة للمحافظات - مجموعة متناسقة وجميلة
+  const governorateColors = [
+    '#E74C3C', '#3498DB', '#2ECC71', '#F39C12', '#9B59B6',
+    '#1ABC9C', '#34495E', '#E67E22', '#95A5A6', '#F1C40F',
+    '#D35400', '#27AE60', '#2980B9', '#8E44AD', '#16A085',
+    '#2C3E50', '#F39C12', '#E74C3C', '#3498DB', '#2ECC71',
+    '#9B59B6', '#1ABC9C', '#34495E', '#E67E22', '#95A5A6'
+  ];
+
+  // خريطة لتخزين ألوان المحافظات
+  const [governorateColorMap, setGovernorateColorMap] = useState(new Map());
+
+  // دالة للحصول على لون المحافظة
+  const getGovernorateColor = (governorate, rowIndex) => {
+    if (rowIndex === 0) return null; // رأس الجدول
+
+    if (!governorateColorMap.has(governorate)) {
+      const colorIndex = governorateColorMap.size % governorateColors.length;
+      const newColorMap = new Map(governorateColorMap);
+      newColorMap.set(governorate, governorateColors[colorIndex]);
+      setGovernorateColorMap(newColorMap);
+      return governorateColors[colorIndex];
+    }
+
+    return governorateColorMap.get(governorate);
+  };
 
   useEffect(() => {
     loadReports();
@@ -21,21 +47,19 @@ export default function Reports() {
   const loadReports = async () => {
     try {
       setLoading(true);
-      const [summaryRes, monthlyRes, govRes, mosqueRes, materialsRes] = await Promise.all([
+      const [summaryRes, monthlyRes, govRes, mosqueRes, sheetRes] = await Promise.all([
         api.getReportsSummary(),
         api.getReportsByMonth(),
         api.getReportsByGovernorate(),
         api.getReportsByMosque(),
-        api.getMaterialsByGovernorate()
+        api.getReportsSheetData()
       ]);
 
       setSummary(summaryRes);
       setMonthlyData(monthlyRes);
       setGovernorateData(govRes);
       setMosqueData(mosqueRes);
-      setMaterialsByGovernorate(materialsRes.data || {});
-      setMaterialsList(materialsRes.materials || []);
-      setGovernoratesList(materialsRes.governorates || []);
+      setSheetData(sheetRes.data || []);
     } catch (err) {
       setError('فشل في تحميل التقارير');
       console.error('خطأ في تحميل التقارير:', err);
@@ -43,6 +67,8 @@ export default function Reports() {
       setLoading(false);
     }
   };
+
+
 
   if (loading) {
     return (
@@ -89,13 +115,14 @@ export default function Reports() {
             📋 التفاصيل
           </button>
           <button
-            className={`view-toggle ${activeView === 'materials' ? 'active' : ''}`}
-            onClick={() => setActiveView('materials')}
+            className={`view-toggle ${activeView === 'sheet' ? 'active' : ''}`}
+            onClick={() => setActiveView('sheet')}
           >
-            📦 المواد بالمحافظات
+            📊 ورقة التقارير
           </button>
+
           <button onClick={loadReports} className="refresh-btn">
-            🔄 تحديث
+            🔄 تحديث البيانات
           </button>
         </div>
       </div>
@@ -318,54 +345,177 @@ export default function Reports() {
         </>
       )}
 
-      {activeView === 'materials' && (
+      {activeView === 'sheet' && (
         <>
-          {/* تقرير المواد المفصل حسب المحافظة */}
+          {/* عرض بيانات ورقة Reports الخام */}
           <div className="detailed-section">
-            <h3>📦 تفاصيل المواد حسب المحافظة</h3>
-            <div className="materials-table-container">
-              <table className="materials-governorate-table">
-                <thead>
-                  <tr>
-                    <th rowSpan="2" className="material-column">الصنف</th>
-                    {governoratesList.map((gov, index) => (
-                      <th key={index} colSpan="3" className="governorate-header">{gov}</th>
-                    ))}
-                  </tr>
-                  <tr>
-                    {governoratesList.map((gov, index) => (
-                      <React.Fragment key={`sub-${index}`}>
-                        <th className="sub-header">المخصص</th>
-                        <th className="sub-header">المستلم</th>
-                        <th className="sub-header">غير مستلم</th>
-                      </React.Fragment>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {materialsList.map((material, materialIndex) => (
-                    <tr key={materialIndex}>
-                      <td className="material-name">{material}</td>
-                      {governoratesList.map((gov, govIndex) => {
-                        const data = materialsByGovernorate[material]?.[gov] || { allocated: 0, received: 0, notDelivered: 0 };
-                        return (
-                          <React.Fragment key={`data-${govIndex}`}>
-                            <td className="data-cell allocated">{data.allocated.toLocaleString('ar')}</td>
-                            <td className="data-cell received">{data.received.toLocaleString('ar')}</td>
-                            <td className={`data-cell not-delivered ${data.notDelivered > 0 ? 'warning' : ''}`}>
-                              {data.notDelivered.toLocaleString('ar')}
-                            </td>
-                          </React.Fragment>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
+            <h3>📊 بيانات ورقة التقارير</h3>
+            <div className="sheet-table-container">
+              <table className="sheet-data-table">
+                {sheetData.length > 0 && (
+                  <>
+                    <thead>
+                      {/* رؤوس الأعمدة الأولى (0-3) */}
+                      <tr>
+                        {sheetData[0].slice(0, 4).map((cell, cellIndex) => (
+                          <th key={cellIndex} className="sheet-cell header-cell" title={cell || 'فارغ'}>
+                            {cell || '—'}
+                          </th>
+                        ))}
+                        {/* تجميع الأعمدة الخاصة بالمحافظات كل 3 أعمدة مع بعض */}
+                        {(() => {
+                          const governorateHeaders = [];
+                          for (let i = 4; i < sheetData[0].length; i += 3) {
+                            const governorateIndex = Math.floor((i - 4) / 3);
+                            let governorateName = '';
+
+                            // قراءة أرقام المحافظات من الخلايا المحددة واستخدام الأسماء الثابتة
+                            if (governorateIndex === 0) {
+                              // المحافظة الأولى: محافظة حولى مع الرقم من الخلية E1 (صف 1، عمود E - index 4)
+                              const governorateNumber = sheetData[0] && sheetData[0][4] ? sheetData[0][4] : '1';
+                              governorateName = `محافظة حولى (${governorateNumber})`;
+                            } else if (governorateIndex === 1) {
+                              // المحافظة الثانية: محافظة العاصمة مع الرقم من الخلية H1 (صف 1، عمود H - index 7)
+                              const governorateNumber = sheetData[0] && sheetData[0][7] ? sheetData[0][7] : '2';
+                              governorateName = `محافظة العاصمة (${governorateNumber})`;
+                            } else if (governorateIndex === 2) {
+                              // المحافظة الثالثة: محافظة الأحمدي مع الرقم من الخلية K1 (صف 1، عمود K - index 10)
+                              const governorateNumber = sheetData[0] && sheetData[0][10] ? sheetData[0][10] : '3';
+                              governorateName = `محافظة الأحمدي (${governorateNumber})`;
+                            } else if (governorateIndex === 3) {
+                              // المحافظة الرابعة: محافظة الفروانية مع الرقم من الخلية N1 (صف 1، عمود N - index 13)
+                              const governorateNumber = sheetData[0] && sheetData[0][13] ? sheetData[0][13] : '4';
+                              governorateName = `محافظة الفروانية (${governorateNumber})`;
+                            } else if (governorateIndex === 4) {
+                              // المحافظة الخامسة: محافظة مبارك الكبير مع الرقم من الخلية Q1 (صف 1، عمود Q - index 16)
+                              const governorateNumber = sheetData[0] && sheetData[0][16] ? sheetData[0][16] : '5';
+                              governorateName = `محافظة مبارك الكبير (${governorateNumber})`;
+                            } else if (governorateIndex === 5) {
+                              // المحافظة السادسة: محافظة الجهراء مع الرقم من الخلية T1 (صف 1، عمود T - index 19)
+                              const governorateNumber = sheetData[0] && sheetData[0][19] ? sheetData[0][19] : '6';
+                              governorateName = `محافظة الجهراء (${governorateNumber})`;
+                            } else {
+                              // للمحافظات الأخرى استخدم الترقيم العام
+                              governorateName = `محافظة (${governorateIndex + 1})`;
+                            }
+
+                            governorateHeaders.push(
+                              <th
+                                key={`gov-${i}`}
+                                colSpan="3"
+                                className="sheet-cell header-cell governorate-group-header"
+                                title={governorateName}
+                              >
+                                {governorateName}
+                              </th>
+                            );
+                          }
+                          return governorateHeaders;
+                        })()}
+                      </tr>
+                      {/* رؤوس الأعمدة الفرعية للمحافظات */}
+                      <tr>
+                        {/* أعمدة فارغة للأعمدة الأولى */}
+                        <th className="sheet-cell header-cell sub-header"></th>
+                        <th className="sheet-cell header-cell sub-header"></th>
+                        <th className="sheet-cell header-cell sub-header"></th>
+                        <th className="sheet-cell header-cell sub-header"></th>
+                        {/* رؤوس الأعمدة الفرعية للمحافظات */}
+                        {(() => {
+                          const subHeaders = [];
+                          const totalGovernorates = Math.ceil((sheetData[0].length - 4) / 3);
+                          for (let govIndex = 0; govIndex < totalGovernorates; govIndex++) {
+                            subHeaders.push(
+                              <th key={`sub-allocated-${govIndex}`} className="sheet-cell header-cell sub-header" title="المخصص">
+                                المخصص
+                              </th>,
+                              <th key={`sub-received-${govIndex}`} className="sheet-cell header-cell sub-header" title="المستلم">
+                                المستلم
+                              </th>,
+                              <th key={`sub-not-received-${govIndex}`} className="sheet-cell header-cell sub-header" title="غير مستلم">
+                                غير مستلم
+                              </th>
+                            );
+                          }
+                          return subHeaders;
+                        })()}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sheetData.slice(1).map((row, rowIndex) => (
+                        <tr key={rowIndex + 1}>
+                          {row.map((cell, cellIndex) => {
+                            // تحديد نوع البيانات للتصميم
+                            let cellClass = "sheet-cell";
+                            let cellStyle = {};
+
+                            // تحديد عمود المحافظة (index يبدأ من 0)
+                            // 0=الأول, 1=الثاني, 2=الثالث, 3=الرابع, 4=الخامس, إلخ
+                            const governorateColumnIndex = 4; // غالباً ما يكون العمود الخامس (index 4)
+
+                            if (cellIndex === governorateColumnIndex && cell && cell.trim() !== '') {
+                              // هذه خلية محافظة
+                              cellClass += " governorate-cell";
+                              const governorateColor = getGovernorateColor(cell, rowIndex + 1);
+                              if (governorateColor) {
+                                cellStyle = {
+                                  background: `linear-gradient(135deg, ${governorateColor}15 0%, ${governorateColor}08 100%)`,
+                                  borderLeft: `4px solid ${governorateColor}`,
+                                  fontWeight: '600',
+                                  color: '#2c3e50',
+                                  boxShadow: `inset 0 0 0 1px ${governorateColor}30`
+                                };
+                              }
+                            } else if (cellIndex < 4) {
+                              cellClass += " data-cell";
+                            } else if (!isNaN(parseFloat(cell)) && isFinite(cell)) {
+                              cellClass += " numeric-cell";
+                              // تمييز الأرقام السالبة
+                              if (parseFloat(cell) < 0) {
+                                cellClass += " negative-number";
+                                cellStyle = {
+                                  ...cellStyle,
+                                  background: 'linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(220, 53, 69, 0.05) 100%)',
+                                  color: '#dc3545',
+                                  fontWeight: '700',
+                                  border: '2px solid rgba(220, 53, 69, 0.3)'
+                                };
+                              }
+                            } else if (!cell || cell.trim() === '') {
+                              cellClass += " empty-cell";
+                            }
+
+                            return (
+                              <td
+                                key={cellIndex}
+                                className={cellClass}
+                                style={cellStyle}
+                                title={cell || 'فارغ'}
+                              >
+                                {cell || '—'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </>
+                )}
               </table>
             </div>
+            {sheetData.length === 0 && (
+              <div className="no-data">
+                <p>لا توجد بيانات في ورقة Reports أو لم يتم تحميلها بعد.</p>
+                <button onClick={loadReports} className="retry-btn">
+                  🔄 إعادة المحاولة
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}
+
+
     </div>
   );
 }

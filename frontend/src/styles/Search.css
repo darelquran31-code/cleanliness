@@ -106,6 +106,13 @@
   border-bottom: 1px solid #ddd;
 }
 
+/* Make date column wider */
+.search-table th:first-child,
+.search-table td:first-child {
+  min-width: 180px;
+  white-space: nowrap;
+}
+
 .search-table th {
   background-color: #f8f9fa;
   font-weight: bold;

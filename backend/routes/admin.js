@@ -171,9 +171,9 @@ router.get('/reports/summary', verifyToken, async (req, res) => {
           workersCount.add(r[11]);
         }
 
-        // sum materials (materials start at column 15)
+        // sum materials (materials start at column 16, index 15)
         for (let i = 0; i < materialNames.length; i++) {
-          const qty = parseFloat(r[15 + i]) || 0;
+          const qty = parseFloat(r[16 + i]) || 0;
           totalMaterialsDistributed += qty;
         }
       }
@@ -226,8 +226,8 @@ router.get('/reports/by-month', verifyToken, async (req, res) => {
         }
         monthlyData[key].count++;
 
-        // sum materials (materials start at column 15, after month/year)
-        for (let i = 15; i < r.length; i++) {
+        // sum materials (materials start at column 16, index 15)
+        for (let i = 16; i < r.length; i++) {
           const qty = parseFloat(r[i]) || 0;
           monthlyData[key].materials += qty;
         }
@@ -276,8 +276,8 @@ router.get('/reports/by-governorate', verifyToken, async (req, res) => {
         }
         governorateData[gov].count++;
 
-        // sum materials (materials start at column 15)
-        for (let i = 15; i < r.length; i++) {
+        // sum materials (materials start at column 16, index 15)
+        for (let i = 16; i < r.length; i++) {
           const qty = parseFloat(r[i]) || 0;
           governorateData[gov].materials += qty;
         }
@@ -297,84 +297,125 @@ router.get('/reports/by-governorate', verifyToken, async (req, res) => {
   }
 });
 
-// تقارير - تفاصيل المواد حسب المحافظة
+// تقارير - تفاصيل المواد حسب المحافظة (من جدول Reports)
 router.get('/reports/materials-by-governorate', verifyToken, async (req, res) => {
   try {
-    const receipts = await sheetsService.getData('AllReceipts!A:AG');
-    const materialsData = await sheetsService.getData('Materials!A:C');
+    const reportsService = (await import('../services/reportsService.js')).default;
 
-    // Get materials with their allocated quantities per mosque
-    const materials = materialsData.slice(1).map((row, index) => ({
-      name: row[0] || 'مادة',
-      unit: row[1] || '',
-      quantityPerMosque: parseFloat(row[2]) || 0
-    }));
+    // قراءة البيانات من جدول Reports
+    const reportsData = await reportsService.getReportsData();
 
-    const materialNames = materials.map(m => m.name);
-    const governorates = [...new Set(receipts.slice(1).map(r => r[4]).filter(g => g))]; // unique governorates
+    // استخراج بيانات المواد بالمحافظات
+    const materialsByGovernorate = reportsData.materialsByGovernorate || {};
 
-    // Count mosques per governorate
-    const mosquesByGovernorate = {};
-    governorates.forEach(gov => {
-      mosquesByGovernorate[gov] = new Set();
-    });
-
-    receipts.slice(1).forEach(r => {
-      if (r[0] && r[3] && r[4]) { // has data, mosque, and governorate
-        const mosque = r[3];
-        const governorate = r[4];
-        if (mosquesByGovernorate[governorate]) {
-          mosquesByGovernorate[governorate].add(mosque);
-        }
-      }
-    });
-
-    const materialsByGovernorate = {};
-
-    // Initialize data structure and calculate allocated amounts
-    materials.forEach((material, materialIndex) => {
-      materialsByGovernorate[material.name] = {};
-      governorates.forEach(gov => {
-        const mosquesCount = mosquesByGovernorate[gov].size;
-        const allocated = material.quantityPerMosque * mosquesCount;
-
-        materialsByGovernorate[material.name][gov] = {
-          allocated: allocated,
-          received: 0,
-          notDelivered: 0
-        };
-      });
-    });
-
-    // Process receipts to get actual received quantities
-    receipts.slice(1).forEach(r => {
-      if (r[0] && r[4]) { // has data and governorate
-        const governorate = r[4];
-
-        // Process each material received quantities
-        materials.forEach((material, materialIndex) => {
-          const receivedIndex = 16 + materialIndex;  // received quantity (one column per material starting at Q)
-
-          const received = parseFloat(r[receivedIndex]) || 0;
-
-          if (materialsByGovernorate[material.name] && materialsByGovernorate[material.name][governorate]) {
-            materialsByGovernorate[material.name][governorate].received += received;
-            // Recalculate notDelivered based on correct allocated amount
-            const allocated = materialsByGovernorate[material.name][governorate].allocated;
-            materialsByGovernorate[material.name][governorate].notDelivered = Math.max(0, allocated - materialsByGovernorate[material.name][governorate].received);
-          }
-        });
-      }
-    });
+    // استخراج أسماء المواد والمحافظات من البيانات
+    const materials = Object.keys(materialsByGovernorate);
+    const governorates = [...new Set(
+      materials.flatMap(material =>
+        Object.keys(materialsByGovernorate[material] || {})
+      )
+    )];
 
     res.json({
-      materials: materialNames,
+      materials: materials,
       governorates: governorates,
       data: materialsByGovernorate
     });
   } catch (error) {
-    console.error('❌ خطأ في جلب تقرير المواد:', error);
-    res.status(500).json({ error: 'حدث خطأ في السيرفر' });
+    console.error('❌ خطأ في جلب تقرير المواد من جدول Reports:', error);
+
+    // في حالة فشل قراءة جدول Reports، استخدم الحساب المباشر كبديل
+    try {
+      console.log('🔄 محاولة الحساب المباشر كبديل...');
+      const receipts = await sheetsService.getData('AllReceipts!A:AG');
+      const materialsData = await sheetsService.getData('Materials!A:C');
+
+      const materials = materialsData.slice(1).map((row, index) => ({
+        name: row[0] || 'مادة',
+        unit: row[1] || '',
+        quantityPerMosque: parseFloat(row[2]) || 0
+      }));
+
+      const materialNames = materials.map(m => m.name);
+      const governorates = [...new Set(receipts.slice(1).map(r => r[4]).filter(g => g))];
+
+      // Count receipts per governorate
+      const receiptsByGovernorate = {};
+      governorates.forEach(gov => {
+        receiptsByGovernorate[gov] = 0;
+      });
+
+      receipts.slice(1).forEach(r => {
+        if (r[0] && r[4]) {
+          const governorate = r[4];
+          if (receiptsByGovernorate[governorate] !== undefined) {
+            receiptsByGovernorate[governorate]++;
+          }
+        }
+      });
+
+      const materialsByGovernorate = {};
+
+      materials.forEach((material, materialIndex) => {
+        materialsByGovernorate[material.name] = {};
+        governorates.forEach(gov => {
+          const receiptsCount = receiptsByGovernorate[gov] || 0;
+          const allocated = material.quantityPerMosque * receiptsCount;
+
+          materialsByGovernorate[material.name][gov] = {
+            allocated: allocated,
+            received: 0,
+            notDelivered: 0
+          };
+        });
+      });
+
+      // Process receipts
+      receipts.slice(1).forEach(r => {
+        if (r[0] && r[4]) {
+          const governorate = r[4];
+
+          materials.forEach((material, materialIndex) => {
+            const receivedIndex = 16 + materialIndex;
+            const received = parseFloat(r[receivedIndex]) || 0;
+
+            if (materialsByGovernorate[material.name] && materialsByGovernorate[material.name][governorate]) {
+              materialsByGovernorate[material.name][governorate].received += received;
+              const allocated = materialsByGovernorate[material.name][governorate].allocated;
+              materialsByGovernorate[material.name][governorate].notDelivered = Math.max(0, allocated - materialsByGovernorate[material.name][governorate].received);
+            }
+          });
+        }
+      });
+
+      res.json({
+        materials: materialNames,
+        governorates: governorates,
+        data: materialsByGovernorate
+      });
+    } catch (fallbackError) {
+      console.error('❌ فشل الحساب المباشر أيضاً:', fallbackError);
+      res.status(500).json({ error: 'حدث خطأ في السيرفر' });
+    }
+  }
+});
+
+// تحديث جميع التقارير في جدول Reports
+router.post('/reports/update-all', verifyToken, async (req, res) => {
+  try {
+    const reportsService = (await import('../services/reportsService.js')).default;
+
+    console.log('🔄 بدء تحديث جميع التقارير...');
+    const result = await reportsService.updateAllReports();
+
+    res.json({
+      success: true,
+      message: 'تم تحديث جميع التقارير بنجاح',
+      data: result
+    });
+  } catch (error) {
+    console.error('❌ خطأ في تحديث التقارير:', error);
+    res.status(500).json({ error: 'حدث خطأ في تحديث التقارير' });
   }
 });
 
@@ -393,8 +434,8 @@ router.get('/reports/by-mosque', verifyToken, async (req, res) => {
         }
         mosqueData[mosque].count++;
 
-        // sum materials (materials start at column 15)
-        for (let i = 15; i < r.length; i++) {
+        // sum materials (materials start at column 16, index 15)
+        for (let i = 16; i < r.length; i++) {
           const qty = parseFloat(r[i]) || 0;
           mosqueData[mosque].materials += qty;
         }
@@ -495,6 +536,27 @@ router.get('/search-receipts', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('❌ خطأ في البحث:', error);
     res.status(500).json({ error: 'حدث خطأ في السيرفر' });
+  }
+});
+
+// قراءة بيانات ورقة Reports الخام
+router.get('/reports/sheet-data', verifyToken, async (req, res) => {
+  try {
+    const reportsData = await sheetsService.getData('Reports!A:Z');
+
+    // تنظيف البيانات وإزالة الصفوف الفارغة
+    const cleanedData = reportsData.filter(row =>
+      row && row.some(cell => cell !== null && cell !== undefined && cell !== '')
+    );
+
+    res.json({
+      data: cleanedData,
+      totalRows: cleanedData.length,
+      totalCols: cleanedData.length > 0 ? cleanedData[0].length : 0
+    });
+  } catch (error) {
+    console.error('❌ خطأ في قراءة بيانات ورقة Reports:', error);
+    res.status(500).json({ error: 'حدث خطأ في قراءة البيانات' });
   }
 });
 
