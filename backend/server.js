@@ -1,50 +1,20 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import authRoutes from './routes/auth.js';
-import adminRoutes from './routes/admin.js';
-import userRoutes from './routes/user.js';
-import sheetsService from './services/sheetsService.js';
-
-dotenv.config();
+import express from "express";
+import path from "path";
 
 const app = express();
+const __dirname = path.resolve();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// Serve frontend static files
+app.use(express.static(path.join(__dirname, "frontend", "dist")));
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/user', userRoutes);
-
-// Error handling
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'حدث خطأ في السيرفر' });
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
 });
 
-const PORT = process.env.PORT || 5000;
+// API routes
+// app.use("/api", apiRoutes);
 
-// بدء السيرفر
-(async () => {
-  try {
-    console.log('🚀 بدء تشغيل السيرفر...');
+app.listen(process.env.PORT || 10000, () => {
+  console.log("Server running...");
+});
 
-    // بدء السيرفر أولاً
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`✅ السيرفر يعمل على البورت: ${PORT}`);
-      console.log(`🌐 يمكن الوصول إليه على: http://localhost:${PORT}`);
-    });
-
-    // تهيئة Google Sheets بعد بدء السيرفر
-    console.log('🔄 بدء تهيئة Google Sheets...');
-    await sheetsService.initialize();
-    console.log('✅ تم تهيئة Google Sheets بنجاح');
-
-  } catch (error) {
-    console.error('❌ خطأ في تهيئة Google Sheets:', error.message);
-    console.error('سيستمر السيرفر بدون Google Sheets');
-  }
-})();
